@@ -24,20 +24,26 @@ func args(db *gorm.DB) bool {
 		flag := command.Commands(db)
 		return flag
 	}
-
 	return true
 }
 
 func run(server *gin.Engine) {
-	server.Static("/assets", "./assets")
+	// Hanya load static jika folder assets ada (Mencegah error di Vercel read-only filesystem)
+	if _, err := os.Stat("./assets"); err == nil {
+		server.Static("/assets", "./assets")
+	}
 
 	if os.Getenv("IS_LOGGER") == "true" {
 		route.LoggerRoute(server)
 	}
 
-	port := os.Getenv("GOLANG_PORT")
+	// Deteksi port Vercel (PORT) atau fallback ke GOLANG_PORT / 8888
+	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8888"
+		port = os.Getenv("GOLANG_PORT")
+		if port == "" {
+			port = "8888"
+		}
 	}
 
 	var serve string
@@ -92,6 +98,14 @@ func main() {
 
 	server := gin.Default()
 	server.Use(middleware.CORSMiddleware())
+
+	// Endpoint root untuk cek status di Vercel
+	server.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "success",
+			"message": "Backend Kantara Go is running on Vercel!",
+		})
+	})
 
 	route.UserRoute(server, userController, jwtService)
 	route.TableRoute(server, tableController, jwtService)
