@@ -9,7 +9,7 @@ import (
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		
+
 		if origin != "" {
 			c.Header("Access-Control-Allow-Origin", origin)
 		} else {
