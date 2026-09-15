@@ -65,6 +65,14 @@ func initApp() {
 			route.LoggerRoute(app)
 		}
 
+		// Tambahkan route ini tepat di atas route.UserRoute(app, ...)
+app.GET("/", func(c *gin.Context) {
+    c.JSON(http.StatusOK, gin.H{
+        "status":  "success",
+        "message": "Backend Kantara Go is running on Vercel!",
+    })
+})
+
 		route.UserRoute(app, userController, jwtService)
 		route.TableRoute(app, tableController, jwtService)
 		route.CategoryRoute(app, categoryController, jwtService)
