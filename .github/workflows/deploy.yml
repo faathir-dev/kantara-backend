@@ -1,0 +1,24 @@
+name: Auto Pull and Build
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Copy, Build, Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute remote SSH commands using password
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: |
+            export PATH=$PATH:/usr/local/go/bin
+            cd /var/www/fp-kpl-be
+            git pull origin main
+            go build -o main main.go
+            sudo systemctl restart goweb
