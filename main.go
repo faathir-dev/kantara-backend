@@ -13,10 +13,17 @@ import (
 	"fp-kpl/presentation/middleware"
 	"fp-kpl/presentation/route"
 	"log"
+	"net/http"
 	"os"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+)
+
+var (
+	app  *gin.Engine
+	once sync.Once
 )
 
 func args(db *gorm.DB) bool {
@@ -28,12 +35,69 @@ func args(db *gorm.DB) bool {
 	return true
 }
 
-func run(server *gin.Engine) {
-	server.Static("/assets", "./assets")
+func initApp() {
+	once.Do(func() {
+		db := config.SetUpDatabaseConnection()
 
-	if os.Getenv("IS_LOGGER") == "true" {
-		route.LoggerRoute(server)
-	}
+		jwtService := service.NewJWTService()
+		dbTransactionRepository := db_transaction.NewRepository(db)
+
+		userRepository := repository.NewUserRepository(dbTransactionRepository)
+		tableRepository := repository.NewTableRepository(dbTransactionRepository)
+		categoryRepository := repository.NewCategoryRepository(dbTransactionRepository)
+		menuRepository := repository.NewMenuRepository(dbTransactionRepository)
+		orderRepository := repository.NewOrderRepository(dbTransactionRepository)
+		transactionRepository := repository.NewTransactionRepository(dbTransactionRepository)
+
+		transactionDomainService := transaction.NewService(transactionRepository)
+		orderDomainService := order.NewService()
+
+		paymentGateway := payment_gateway.NewMidtransAdapter(db, transactionDomainService)
+
+		userService := service.NewUserService(userRepository, jwtService, dbTransactionRepository)
+		tableService := service.NewTableService(tableRepository)
+		categoryService := service.NewCategoryService(categoryRepository)
+		menuService := service.NewMenuService(menuRepository, categoryRepository)
+		orderService := service.NewOrderService(orderRepository, menuRepository, orderDomainService)
+		transactionService := service.NewTransactionService(transactionRepository, userRepository, tableRepository, orderRepository, menuRepository, transactionDomainService, paymentGateway, dbTransactionRepository, orderService)
+
+		userController := controller.NewUserController(userService)
+		tableController := controller.NewTableController(tableService)
+		categoryController := controller.NewCategoryController(categoryService)
+		menuController := controller.NewMenuController(menuService)
+		transactionController := controller.NewTransactionController(transactionService)
+		orderController := controller.NewOrderController(orderService)
+
+		if !args(db) {
+			return
+		}
+
+		app = gin.Default()
+		app.Use(middleware.CORSMiddleware())
+
+		app.Static("/assets", "./assets")
+
+		if os.Getenv("IS_LOGGER") == "true" {
+			route.LoggerRoute(app)
+		}
+
+		route.UserRoute(app, userController, jwtService)
+		route.TableRoute(app, tableController, jwtService)
+		route.CategoryRoute(app, categoryController, jwtService)
+		route.MenuRoute(app, menuController, jwtService, userService)
+		route.TransactionRoute(app, transactionController, jwtService, userService)
+		route.OrderRoute(app, orderController, jwtService)
+	})
+}
+
+// Handler di-export untuk Vercel Serverless Function
+func Handler(w http.ResponseWriter, r *http.Request) {
+	initApp()
+	app.ServeHTTP(w, r)
+}
+
+func main() {
+	initApp()
 
 	port := os.Getenv("GOLANG_PORT")
 	if port == "" {
@@ -47,58 +111,7 @@ func run(server *gin.Engine) {
 		serve = ":" + port
 	}
 
-	if err := server.Run(serve); err != nil {
+	if err := app.Run(serve); err != nil {
 		log.Fatalf("error running server: %v", err)
 	}
-}
-
-func main() {
-	db := config.SetUpDatabaseConnection()
-
-	jwtService := service.NewJWTService()
-	dbTransactionRepository := db_transaction.NewRepository(db)
-
-	userRepository := repository.NewUserRepository(dbTransactionRepository)
-	tableRepository := repository.NewTableRepository(dbTransactionRepository)
-	categoryRepository := repository.NewCategoryRepository(dbTransactionRepository)
-	menuRepository := repository.NewMenuRepository(dbTransactionRepository)
-	orderRepository := repository.NewOrderRepository(dbTransactionRepository)
-	transactionRepository := repository.NewTransactionRepository(dbTransactionRepository)
-
-	transactionDomainService := transaction.NewService(transactionRepository)
-	orderDomainService := order.NewService()
-
-	paymentGateway := payment_gateway.NewMidtransAdapter(db, transactionDomainService)
-
-	userService := service.NewUserService(userRepository, jwtService, dbTransactionRepository)
-	tableService := service.NewTableService(tableRepository)
-	categoryService := service.NewCategoryService(categoryRepository)
-	menuService := service.NewMenuService(menuRepository, categoryRepository)
-	orderService := service.NewOrderService(orderRepository, menuRepository, orderDomainService)
-	transactionService := service.NewTransactionService(transactionRepository, userRepository, tableRepository, orderRepository, menuRepository, transactionDomainService, paymentGateway, dbTransactionRepository, orderService)
-
-	userController := controller.NewUserController(userService)
-	tableController := controller.NewTableController(tableService)
-	categoryController := controller.NewCategoryController(categoryService)
-	menuController := controller.NewMenuController(menuService)
-	transactionController := controller.NewTransactionController(transactionService)
-	orderController := controller.NewOrderController(orderService)
-
-	defer config.CloseDatabaseConnection(db)
-
-	if !args(db) {
-		return
-	}
-
-	server := gin.Default()
-	server.Use(middleware.CORSMiddleware())
-
-	route.UserRoute(server, userController, jwtService)
-	route.TableRoute(server, tableController, jwtService)
-	route.CategoryRoute(server, categoryController, jwtService)
-	route.MenuRoute(server, menuController, jwtService, userService)
-	route.TransactionRoute(server, transactionController, jwtService, userService)
-	route.OrderRoute(server, orderController, jwtService)
-
-	run(server)
 }
