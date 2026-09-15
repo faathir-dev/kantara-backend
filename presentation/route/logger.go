@@ -13,15 +13,17 @@ import (
 
 const (
 	LogDirectory = "./logs/query_log"
-
-	LogHtml = "logs.html"
+	LogHtml      = "logs.html"
 )
 
 func LoggerRoute(router *gin.Engine) {
-	router.LoadHTMLGlob(LogHtml)
+	// Cek ketersediaan file logs.html terlebih dahulu agar tidak panic di Vercel
+	if _, err := os.Stat(LogHtml); err == nil {
+		router.LoadHTMLGlob(LogHtml)
 
-	router.GET("/logs/:month", Logger)
-	router.GET("/logs", Logger)
+		router.GET("/logs/:month", Logger)
+		router.GET("/logs", Logger)
+	}
 }
 
 func Logger(c *gin.Context) {
