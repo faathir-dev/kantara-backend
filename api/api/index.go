@@ -59,19 +59,20 @@ func initApp() {
 		app = gin.Default()
 		app.Use(middleware.CORSMiddleware())
 
-		app.Static("/assets", "./assets")
+		if _, err := os.Stat("./assets"); err == nil {
+			app.Static("/assets", "./assets")
+		}
 
 		if os.Getenv("IS_LOGGER") == "true" {
 			route.LoggerRoute(app)
 		}
 
-		// Tambahkan route ini tepat di atas route.UserRoute(app, ...)
-app.GET("/", func(c *gin.Context) {
-    c.JSON(http.StatusOK, gin.H{
-        "status":  "success",
-        "message": "Backend Kantara Go is running on Vercel!",
-    })
-})
+		app.GET("/", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "success",
+				"message": "Backend Kantara Go is running on Vercel!",
+			})
+		})
 
 		route.UserRoute(app, userController, jwtService)
 		route.TableRoute(app, tableController, jwtService)
@@ -82,7 +83,7 @@ app.GET("/", func(c *gin.Context) {
 	})
 }
 
-// Handler harus ber-package handler dan mengekspor fungsi Handler
+// Fungsi inilah yang dicari oleh Vercel Go Runtime ("Could not find an exported function")
 func Handler(w http.ResponseWriter, r *http.Request) {
 	initApp()
 	app.ServeHTTP(w, r)
